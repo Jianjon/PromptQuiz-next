@@ -1,4 +1,8 @@
-// src/lib/gpt.ts
+'use server';
+
+if (process.env.NODE_ENV !== "production") {
+  console.log('DEBUG ENV KEY:', process.env.OPENAI_API_KEY);
+}
 
 import OpenAI from "openai";
 import { getPromptForTopic } from "./promptTemplates";
@@ -20,6 +24,9 @@ function extractJSONArray(raw: string): any[] {
     if (parsed.questions && Array.isArray(parsed.questions)) return parsed.questions;
     return [];
   } catch {
+    if (process.env.NODE_ENV !== "production") {
+      console.error('❌ JSON parse error, raw content:', raw);
+    }
     return [];
   }
 }
