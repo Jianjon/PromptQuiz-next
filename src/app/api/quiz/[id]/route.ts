@@ -4,7 +4,7 @@ import { getQuizById, deleteQuiz } from "@/lib/db/quizDb"; // 改接 quizDb 而�
 
 // 取得單一題組
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const quizId = params.id;
+  const quizId = params.quiz_id;
 
   if (!quizId) {
     return NextResponse.json({ error: "缺少題組 ID" }, { status: 400 });
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 // 刪除單一題組
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const quizId = params.id;
+  const quizId = params.quiz_id;
 
   if (!quizId) {
     return NextResponse.json({ error: "缺少題組 ID" }, { status: 400 });
