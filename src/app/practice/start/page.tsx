@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type Quiz = {
   id: string;
@@ -11,8 +11,10 @@ type Quiz = {
 
 export default function PracticeStartPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlQuizId = searchParams.get("quiz");
 
-  const [step, setStep] = useState<"info" | "quiz">("info");
+  const [step, setStep] = useState<"info" | "quiz">(urlQuizId ? "quiz" : "info");
   const [mode, setMode] = useState<"quiz" | "custom">("quiz");
 
   const [name, setName] = useState("");
@@ -20,7 +22,7 @@ export default function PracticeStartPage() {
   const [organization, setOrganization] = useState("");
 
   const [quizList, setQuizList] = useState<Quiz[]>([]);
-  const [selectedQuizId, setSelectedQuizId] = useState<string>("");
+  const [selectedQuizId, setSelectedQuizId] = useState<string>(urlQuizId || "");
 
   const [quizSize, setQuizSize] = useState<number | "">("");
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
@@ -38,8 +40,9 @@ export default function PracticeStartPage() {
   const [errorAnalyze, setErrorAnalyze] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchQuizList();
-  }, []);
+    if (!urlQuizId) fetchQuizList();
+    if (urlQuizId) handleAutoLoadQuiz(urlQuizId);
+  }, [urlQuizId]);
 
   const fetchQuizList = async () => {
     try {
@@ -48,6 +51,25 @@ export default function PracticeStartPage() {
       setQuizList(data.quizzes || []);
     } catch (err) {
       console.error("無法取得題組列表", err);
+    }
+  };
+
+  const handleAutoLoadQuiz = async (quizId: string) => {
+    setLoadingStart(true);
+    try {
+      const res = await fetch(`/api/quiz/${quizId}`);
+      const data = await res.json();
+      if (res.ok && data.questions) {
+        setQuestions(data.questions);
+        setUserAnswers(new Array(data.questions.length).fill(""));
+        setStep("quiz");
+      } else {
+        setErrorStart("無法取得題目，請稍後再試");
+      }
+    } catch (error) {
+      setErrorStart("網路錯誤，請稍後再試");
+    } finally {
+      setLoadingStart(false);
     }
   };
 
@@ -111,72 +133,22 @@ export default function PracticeStartPage() {
   const handleSubmitQuiz = () => {
     let correctCount = 0;
     questions.forEach((q, idx) => {
-      if (userAnswers[idx] === q.answer) correctCount++;
+      if (userAnswers[idx] === q.correctAnswer || userAnswers[idx] === q.answer) correctCount++;
     });
     setScore(Math.round((correctCount / questions.length) * 100));
     setSubmitted(true);
   };
 
-  const handleAnalyzePerformance = async () => {
-    setAnalyzing(true);
-    setAnalysisResult("");
-    setErrorAnalyze(null);
-
-    try {
-      const payload = questions.map((q, idx) => ({
-        question: q.question,
-        userAnswer: userAnswers[idx] || "",
-        correctAnswer: q.answer,
-      }));
-
-      const res = await fetch("/api/response/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questions: payload }),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setAnalysisResult(`${data.supplementalContent || ""}\n\n${data.suggestion || ""}`);
-      } else {
-        setErrorAnalyze("AI 分析失敗，請稍後再試");
-      }
-    } catch {
-      setErrorAnalyze("⚠️ 無法取得 AI 建議，請稍後再試。");
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  const handleRetry = () => {
-    setSubmitted(false);
-    setScore(0);
-    setAnalysisResult("");
-    setUserAnswers(new Array(questions.length).fill(""));
-  };
-
-  const handleReset = () => {
-    setStep("info");
-    setQuestions([]);
-    setUserAnswers([]);
-    setSubmitted(false);
-    setScore(0);
-    setAnalysisResult("");
-    setErrorAnalyze(null);
-  };
-
   const totalAnswered = userAnswers.filter((a) => a).length;
-  const totalWrong = questions.filter((q, idx) => userAnswers[idx] && userAnswers[idx] !== q.answer).length;
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-white to-blue-50">
       <section className="flex flex-col items-center justify-center py-16 text-center">
         <h1 className="text-4xl font-bold text-gray-800 mb-4">刷題模式</h1>
-        <p className="text-gray-600">選擇練習模式與題目來源</p>
       </section>
 
       <main className="flex flex-col items-center flex-1 p-6">
-        {step === "info" && (
+        {step === "info" && !urlQuizId && (
           <div className="w-full max-w-lg space-y-4">
             <div className="flex gap-4">
               <button onClick={() => setMode("quiz")} className={`px-4 py-2 rounded ${mode === "quiz" ? "bg-blue-600 text-white" : "bg-gray-200"}`}>題組模式</button>
@@ -218,7 +190,49 @@ export default function PracticeStartPage() {
           </div>
         )}
 
-        {/* 題目作答與結果區略，同前版保留 */}
+        {step === "quiz" && (
+          <div className="w-full max-w-4xl space-y-6">
+            {questions.map((q, idx) => (
+              <div key={q.id} className="bg-white p-6 rounded-xl shadow space-y-2">
+                <p className="font-semibold">{idx + 1}. {q.question}</p>
+                {q.options.map((opt, i) => (
+                  <label key={i} className="block">
+                    <input
+                      type="radio"
+                      name={`q-${idx}`}
+                      value={opt}
+                      checked={userAnswers[idx] === opt}
+                      onChange={() => handleAnswer(idx, opt)}
+                      className="mr-2"
+                    />
+                    {opt}
+                  </label>
+                ))}
+              </div>
+            ))}
+
+            {!submitted && (
+              <div className="flex justify-center mt-8">
+                <button
+                  onClick={handleSubmitQuiz}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  disabled={totalAnswered !== questions.length}
+                >
+                  送出作答
+                </button>
+              </div>
+            )}
+
+            {submitted && (
+              <div className="text-center space-y-8 mt-12">
+                <h2 className="text-3xl font-bold text-green-600">刷題完成 🎉</h2>
+                <p className="text-2xl text-gray-800">
+                  得分：<span className="font-bold">{score} 分</span>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       <footer className="text-center text-gray-400 text-sm p-4">&copy; 2025 PromptQuiz. All rights reserved.</footer>
