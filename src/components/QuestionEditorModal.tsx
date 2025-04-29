@@ -1,25 +1,18 @@
-// src/components/QuestionEditorModal.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ComposedQuestion } from "@/lib/agents/questionComposer";
+import { PracticeQuestion } from "@/types/practice";
 
 interface Props {
-  question: ComposedQuestion;
-  onSave: (updated: ComposedQuestion) => void;
+  question: PracticeQuestion;
+  onSave: (updated: PracticeQuestion) => void;
   onCancel: () => void;
   onDelete: () => void;
 }
 
-export default function QuestionEditorModal({
-  question,
-  onSave,
-  onCancel,
-  onDelete,
-}: Props) {
-  const [q, setQ] = useState<ComposedQuestion>(question);
+export default function QuestionEditorModal({ question, onSave, onCancel, onDelete }: Props) {
+  const [q, setQ] = useState<PracticeQuestion>(question);
 
-  // 當 question 變動時重置 local state
   useEffect(() => {
     setQ(question);
   }, [question]);
@@ -34,6 +27,13 @@ export default function QuestionEditorModal({
     <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <h2 className="text-xl font-semibold mb-4">編輯題目</h2>
+
+        <label className="block font-medium">主題</label>
+        <input
+          className="w-full border p-2 rounded mb-4"
+          value={q.topic}
+          onChange={(e) => setQ({ ...q, topic: e.target.value })}
+        />
 
         <label className="block font-medium">題幹</label>
         <textarea
@@ -58,9 +58,7 @@ export default function QuestionEditorModal({
                   const opts = q.options.filter((_, idx) => idx !== i);
                   setQ({ ...q, options: opts });
                 }}
-              >
-                🗑️
-              </button>
+              >🗑️</button>
             )}
           </div>
         ))}
@@ -68,9 +66,7 @@ export default function QuestionEditorModal({
           <button
             className="text-sm text-blue-600 mb-4"
             onClick={() => setQ({ ...q, options: [...q.options, ""] })}
-          >
-            ➕ 新增選項
-          </button>
+          >➕ 新增選項</button>
         )}
 
         <label className="block font-medium">正確答案</label>
@@ -80,9 +76,7 @@ export default function QuestionEditorModal({
           onChange={(e) => setQ({ ...q, answer: e.target.value })}
         >
           {q.options.map((opt, i) => (
-            <option key={i} value={opt}>
-              {opt}
-            </option>
+            <option key={i} value={opt}>{opt}</option>
           ))}
         </select>
 
@@ -98,21 +92,15 @@ export default function QuestionEditorModal({
           <button
             onClick={onDelete}
             className="px-4 py-2 text-red-600 border rounded"
-          >
-            刪除
-          </button>
+          >刪除</button>
           <button
             onClick={onCancel}
             className="px-4 py-2 border rounded"
-          >
-            取消
-          </button>
+          >取消</button>
           <button
             onClick={() => onSave(q)}
             className="px-4 py-2 bg-blue-600 text-white rounded"
-          >
-            儲存
-          </button>
+          >儲存</button>
         </div>
       </div>
     </div>
