@@ -1,99 +1,81 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import QuestionUploadPanel from "@/components/QuestionUploadPanel";
 
-export default function CreatorUploadPage() {
+interface ParsedQuestion {
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  explanation?: string;
+}
+
+export default function UploadPage() {
+  const [questions, setQuestions] = useState<ParsedQuestion[]>([]);
+  const [showFormat, setShowFormat] = useState(false);
   const router = useRouter();
 
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [segments, setSegments] = useState<string[]>([]);
-  const [fileId, setFileId] = useState<string | null>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-    }
+  const handleUpload = (qs: ParsedQuestion[]) => {
+    setQuestions(qs);
   };
 
-  const handleUpload = async () => {
-    if (!file) return;
-
-    setUploading(true);
-    setError(null);
-    setSegments([]);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch("/api/pdf/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const json = await res.json();
-
-      if (res.ok) {
-        setSegments(json.segments || []);
-        setFileId(json.fileId || null);
-      } else {
-        setError(json.message || "無法處理上傳的檔案");
-      }
-    } catch (err) {
-      setError("網路錯誤，請稍後再試");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleGoToQuizCreate = () => {
-    if (fileId) {
-      router.push(`/creator/quiz-create?fileId=${fileId}`);
+  const handleSave = async () => {
+    const res = await fetch("/api/question/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questions }),
+    });
+    if (res.ok) {
+      const result = await res.json();
+      const quizId = result.quizId;
+      alert("題目已成功上傳，前往刷題頁！");
+      router.push(`/practice/${quizId}`);
+    } else {
+      alert("上傳失敗，請檢查格式或重新嘗試。");
     }
   };
 
   return (
-    <div className="min-h-screen p-8">
-      <h1 className="text-3xl font-bold mb-6">上傳教材檔案</h1>
+    <div className="max-w-3xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-4">題庫上傳</h1>
 
-      <input
-        type="file"
-        accept=".pdf,.txt,.docx"
-        onChange={handleFileChange}
-        className="mb-4"
-      />
-
-      <button
-        onClick={handleUpload}
-        disabled={uploading || !file}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
-      >
-        {uploading ? "上傳中..." : "開始上傳"}
-      </button>
-
-      {error && <p className="text-red-600 mt-4">{error}</p>}
-
-      {segments.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-xl font-bold mb-4">切段結果（{segments.length} 段）</h2>
-          <div className="space-y-2">
-            {segments.map((seg, idx) => (
-              <div key={idx} className="p-2 border rounded bg-gray-100 text-sm">
-                {seg.length > 100 ? `${seg.slice(0, 100)}...` : seg}
-              </div>
-            ))}
-          </div>
-
+      <div className="mb-4 flex items-center gap-4">
+        <button
+          className="text-blue-600 underline"
+          onClick={() => setShowFormat(true)}
+        >
+          題庫格式說明
+        </button>
+        {questions.length > 0 && (
           <button
-            onClick={handleGoToQuizCreate}
-            className="mt-6 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+            onClick={handleSave}
+            className="px-4 py-2 bg-green-600 text-white rounded"
           >
-            以此內容建立題組
+            儲存到題庫
+          </button>
+        )}
+      </div>
+
+      {showFormat && (
+        <div className="bg-gray-100 border p-4 rounded mb-4">
+          <p className="font-semibold mb-2">Excel 檔案格式：</p>
+          <ul className="list-disc pl-6 text-sm">
+            <li><b>Question：</b> 題幹（文字）</li>
+            <li><b>Options：</b> 以分號區隔選項，例如 A.甲;B.乙;C.丙;D.丁</li>
+            <li><b>CorrectAnswer：</b> 正確選項代號（A、B、C…）</li>
+            <li><b>Explanation：</b>（可選）解析說明</li>
+          </ul>
+          <button
+            className="mt-2 px-3 py-1 bg-gray-600 text-white rounded"
+            onClick={() => setShowFormat(false)}
+          >
+            關閉說明
           </button>
         </div>
       )}
+
+      <QuestionUploadPanel onUpload={handleUpload} />
     </div>
   );
 }
