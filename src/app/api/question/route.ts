@@ -1,32 +1,50 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseClient";
+import { v4 as uuidv4 } from "uuid";
+import { saveQuestions, getQuestionsByQuizId } from "@/lib/db/questionDb"; // 我們會一起做 questionDb.ts
 
-export const revalidate = 0; // 禁止 cache，確保每次即時拿資料
+// 批量新增題目
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { quizId, questions } = body;
 
+    if (!quizId || !Array.isArray(questions)) {
+      return NextResponse.json({ message: "資料不完整" }, { status: 400 });
+    }
+
+    const questionData = questions.map((q: any) => ({
+      id: uuidv4(),
+      quizId,
+      text: q.question,
+      options: q.options,
+      correctAnswers: q.answer,
+      explanation: q.explanation,
+      createdAt: new Date().toISOString(),
+    }));
+
+    await saveQuestions(questionData);
+
+    return NextResponse.json({ status: "success", count: questionData.length });
+  } catch (error: any) {
+    console.error("[QuestionCreateError]", error);
+    return NextResponse.json({ message: "伺服器錯誤" }, { status: 500 });
+  }
+}
+
+// 取得某題組的所有題目
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const limitParam = url.searchParams.get("limit");
-  const limit = limitParam ? parseInt(limitParam, 10) : 0;
+  try {
+    const { searchParams } = new URL(req.url);
+    const quizId = searchParams.get("quizId");
 
-  if (!limit || limit <= 0) {
-    return NextResponse.json(
-      { error: "請提供有效的 limit 查詢參數" },
-      { status: 400 }
-    );
+    if (!quizId) {
+      return NextResponse.json({ message: "缺少 quizId" }, { status: 400 });
+    }
+
+    const questions = await getQuestionsByQuizId(quizId);
+    return NextResponse.json({ questions });
+  } catch (error: any) {
+    console.error("[QuestionGetError]", error);
+    return NextResponse.json({ message: "伺服器錯誤" }, { status: 500 });
   }
-
-  const { data, error } = await supabaseAdmin
-    .from("questions")
-    .select("id, chapter, question, options, answer, explanation")
-    .limit(limit);
-
-  if (error) {
-    console.error("❌ 取題失敗", error);
-    return NextResponse.json(
-      { error: "無法從資料庫取得題目", details: error.message },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json({ questions: data });
 }
