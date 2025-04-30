@@ -16,6 +16,7 @@ export default function PracticeManagePage() {
     questionCount: 10,
   });
   const [savedQuizId, setSavedQuizId] = useState<string | null>(null);
+  const [readyToShare, setReadyToShare] = useState(false);
 
   const handleSaveQuestion = (updated: PracticeQuestion) => {
     setPracticeQuestions((prev) =>
@@ -63,7 +64,7 @@ export default function PracticeManagePage() {
     if (res.ok) {
       const result = await res.json();
       setSavedQuizId(result.quizId);
-      alert(`題目已儲存成功！`);
+      setReadyToShare(true);
     } else {
       alert("儲存失敗，請稍後再試");
     }
@@ -76,42 +77,22 @@ export default function PracticeManagePage() {
       <div className="flex-1 p-6 overflow-auto">
         <h1 className="text-2xl font-bold mb-6">🎯 題庫管理</h1>
 
-        <div className="space-y-6">
-          {practiceQuestions.slice(0, 50).map((q, idx) => (
-            <div key={q.id} className="border p-4 rounded bg-white shadow">
-              <p className="font-semibold mb-2">{idx + 1}. ({q.topic}) {q.question}</p>
-              <ul className="pl-4 text-sm text-gray-700 list-disc">
-                {q.options.map((opt, i) => (
-                  <li key={i}>{opt}</li>
-                ))}
-              </ul>
-              <p className="text-green-700 text-sm mt-1">正解：{q.correctAnswer}</p>
-              {q.explanation && (
-                <p className="text-gray-500 text-sm">解析：{q.explanation}</p>
-              )}
-              <div className="flex gap-4 mt-4">
-                <button className="px-4 py-1 bg-blue-500 text-white rounded" onClick={() => setEditingQuestion(q)}>編輯</button>
-                <button className="px-4 py-1 bg-red-500 text-white rounded" onClick={() => handleDeleteQuestion(q.id)}>刪除</button>
-              </div>
-            </div>
-          ))}
-          {practiceQuestions.length === 0 && (
-            <p className="text-gray-400">尚無題目，請先上傳或產生題目。</p>
-          )}
-        </div>
+        {!readyToShare && (
+          <div className="flex gap-4 mt-8">
+            <button className="px-6 py-2 bg-green-600 text-white rounded" onClick={handleSaveToBackend}>產生分享連結</button>
+            <button className="px-6 py-2 bg-blue-600 text-white rounded" onClick={handleExportExcel}>下載為 Excel</button>
+          </div>
+        )}
 
-        <div className="flex gap-4 mt-8">
-          <button className="px-6 py-2 bg-green-600 text-white rounded" onClick={handleSaveToBackend}>儲存為題組</button>
-          <button className="px-6 py-2 bg-blue-600 text-white rounded" onClick={handleExportExcel}>下載為 Excel</button>
-        </div>
-
-        {savedQuizId && (
+        {readyToShare && savedQuizId && (
           <div className="mt-6 p-4 bg-green-100 rounded">
             <p className="font-semibold mb-2">🎉 題組儲存完成！分享連結：</p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 mb-4">
               <input className="flex-1 p-2 border rounded" value={shareUrl} readOnly />
               <button onClick={() => navigator.clipboard.writeText(shareUrl)} className="px-4 py-2 bg-blue-500 text-white rounded">複製</button>
             </div>
+            <p className="text-sm text-gray-600">📌 使用者可掃描 QR Code 或點擊連結進入刷題</p>
+            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}`} alt="QR Code" className="mt-2 border rounded" />
           </div>
         )}
       </div>

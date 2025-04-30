@@ -1,241 +1,200 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
-type Quiz = {
+interface Question {
   id: string;
-  title: string;
-  description: string;
-};
+  question: string;
+  options: string[];
+  answer: string;
+  explanation?: string;
+  topic?: string;
+}
 
 export default function PracticeStartPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const urlQuizId = searchParams.get("quiz");
+  const quizId = searchParams.get("quiz");
 
-  const [step, setStep] = useState<"info" | "quiz">(urlQuizId ? "quiz" : "info");
-  const [mode, setMode] = useState<"quiz" | "custom">("quiz");
-
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [organization, setOrganization] = useState("");
-
-  const [quizList, setQuizList] = useState<Quiz[]>([]);
-  const [selectedQuizId, setSelectedQuizId] = useState<string>(urlQuizId || "");
-
-  const [quizSize, setQuizSize] = useState<number | "">("");
-  const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
-  const chapterOptions = ["淨零碳排", "碳盤查"];
-
-  const [questions, setQuestions] = useState<any[]>([]);
+  const [step, setStep] = useState<"select" | "quiz" | "result">("select");
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState<string>("random");
+  const [mode, setMode] = useState<"batch" | "single">("batch");
   const [userAnswers, setUserAnswers] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(0);
-  const [analysisResult, setAnalysisResult] = useState<string>("");
-
-  const [loadingStart, setLoadingStart] = useState(false);
-  const [errorStart, setErrorStart] = useState<string | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [errorAnalyze, setErrorAnalyze] = useState<string | null>(null);
+  const [currentIdx, setCurrentIdx] = useState(0);
 
   useEffect(() => {
-    if (!urlQuizId) fetchQuizList();
-    if (urlQuizId) handleAutoLoadQuiz(urlQuizId);
-  }, [urlQuizId]);
-
-  const fetchQuizList = async () => {
-    try {
-      const res = await fetch("/api/quiz");
-      const data = await res.json();
-      setQuizList(data.quizzes || []);
-    } catch (err) {
-      console.error("無法取得題組列表", err);
+    if (quizId) {
+      fetch(`/api/quiz/${quizId}`)
+        .then(res => res.json())
+        .then(data => {
+          setQuestions(data.questions || []);
+        });
     }
+  }, [quizId]);
+
+  const availableTopics = Array.from(new Set(questions.map(q => q.topic || "未分類")));
+
+  const filteredQuestions = selectedTopic === "random"
+    ? [...questions].sort(() => Math.random() - 0.5).slice(0, 10)
+    : questions.filter(q => q.topic === selectedTopic).slice(0, 10);
+
+  const handleStart = () => {
+    setUserAnswers(new Array(filteredQuestions.length).fill(""));
+    setCurrentIdx(0);
+    setSubmitted(false);
+    setStep("quiz");
   };
 
-  const handleAutoLoadQuiz = async (quizId: string) => {
-    setLoadingStart(true);
-    try {
-      const res = await fetch(`/api/quiz/${quizId}`);
-      const data = await res.json();
-      if (res.ok && data.questions) {
-        setQuestions(data.questions);
-        setUserAnswers(new Array(data.questions.length).fill(""));
-        setStep("quiz");
-      } else {
-        setErrorStart("無法取得題目，請稍後再試");
-      }
-    } catch (error) {
-      setErrorStart("網路錯誤，請稍後再試");
-    } finally {
-      setLoadingStart(false);
-    }
-  };
-
-  const handleStartQuiz = async () => {
-    if (!name || !email || !organization) {
-      alert("請完整填寫資料");
-      return;
-    }
-
-    if (mode === "quiz" && !selectedQuizId) {
-      alert("請選擇題組");
-      return;
-    }
-
-    if (mode === "custom" && (!quizSize || selectedChapters.length === 0)) {
-      alert("請選擇題數與主題");
-      return;
-    }
-
-    setLoadingStart(true);
-    setErrorStart(null);
-    setQuestions([]);
-    setUserAnswers([]);
-    setScore(0);
-    setAnalysisResult("");
-    setErrorAnalyze(null);
-
-    try {
-      let apiUrl = "";
-      if (mode === "quiz") {
-        apiUrl = `/api/question?quizId=${selectedQuizId}`;
-      } else {
-        const params = new URLSearchParams();
-        params.append("limit", String(quizSize));
-        params.append("chapters", selectedChapters.join(","));
-        apiUrl = `/api/question?${params.toString()}`;
-      }
-
-      const res = await fetch(apiUrl);
-      const json = await res.json();
-      if (res.ok && Array.isArray(json.questions)) {
-        setQuestions(json.questions);
-        setUserAnswers(new Array(json.questions.length).fill(""));
-        setStep("quiz");
-      } else {
-        setErrorStart("無法取得題目，請稍後再試");
-      }
-    } catch (error) {
-      setErrorStart("網路錯誤，請稍後再試");
-    } finally {
-      setLoadingStart(false);
-    }
-  };
-
-  const handleAnswer = (idx: number, value: string) => {
+  const handleAnswer = (idx: number, answer: string) => {
     const updated = [...userAnswers];
-    updated[idx] = value;
+    updated[idx] = answer;
     setUserAnswers(updated);
   };
 
-  const handleSubmitQuiz = () => {
-    let correctCount = 0;
-    questions.forEach((q, idx) => {
-      if (userAnswers[idx] === q.correctAnswer || userAnswers[idx] === q.answer) correctCount++;
+  const handleSubmitBatch = () => {
+    let correct = 0;
+    filteredQuestions.forEach((q, idx) => {
+      if (userAnswers[idx] === q.answer) correct++;
     });
-    setScore(Math.round((correctCount / questions.length) * 100));
+    setScore(correct);
     setSubmitted(true);
+    setStep("result");
   };
 
-  const totalAnswered = userAnswers.filter((a) => a).length;
+  const handleNextSingle = () => {
+    if (currentIdx + 1 < filteredQuestions.length) {
+      setCurrentIdx(currentIdx + 1);
+    } else {
+      setStep("result");
+    }
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-white to-blue-50">
-      <section className="flex flex-col items-center justify-center py-16 text-center">
-        <h1 className="text-4xl font-bold text-gray-800 mb-4">刷題模式</h1>
-      </section>
+    <div className="min-h-screen bg-white p-6 max-w-4xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6 text-center">刷題模式</h1>
 
-      <main className="flex flex-col items-center flex-1 p-6">
-        {step === "info" && !urlQuizId && (
-          <div className="w-full max-w-lg space-y-4">
-            <div className="flex gap-4">
-              <button onClick={() => setMode("quiz")} className={`px-4 py-2 rounded ${mode === "quiz" ? "bg-blue-600 text-white" : "bg-gray-200"}`}>題組模式</button>
-              <button onClick={() => setMode("custom")} className={`px-4 py-2 rounded ${mode === "custom" ? "bg-blue-600 text-white" : "bg-gray-200"}`}>自選主題</button>
+      {step === "select" && (
+        <div className="space-y-6">
+          <div>
+            <label className="font-semibold">選擇主題：</label>
+            <select
+              className="w-full border p-2 rounded mt-1"
+              value={selectedTopic}
+              onChange={e => setSelectedTopic(e.target.value)}
+            >
+              <option value="random">隨機出題</option>
+              {availableTopics.map((topic, i) => (
+                <option key={i} value={topic}>{topic}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="font-semibold">出題模式：</label>
+            <div className="flex gap-4 mt-2">
+              <button
+                className={`px-4 py-2 rounded ${mode === "batch" ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+                onClick={() => setMode("batch")}
+              >一次十題</button>
+              <button
+                className={`px-4 py-2 rounded ${mode === "single" ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+                onClick={() => setMode("single")}
+              >一題一題</button>
             </div>
+          </div>
 
-            <input type="text" placeholder="姓名" className="w-full p-2 border rounded" value={name} onChange={(e) => setName(e.target.value)} />
-            <input type="email" placeholder="Email" className="w-full p-2 border rounded" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input type="text" placeholder="單位" className="w-full p-2 border rounded" value={organization} onChange={(e) => setOrganization(e.target.value)} />
+          <button
+            className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+            onClick={handleStart}
+            disabled={questions.length === 0}
+          >開始作答</button>
+        </div>
+      )}
 
-            {mode === "quiz" ? (
-              <select className="w-full p-2 border rounded" value={selectedQuizId} onChange={(e) => setSelectedQuizId(e.target.value)}>
-                <option value="">請選擇題組</option>
-                {quizList.map((quiz) => (
-                  <option key={quiz.id} value={quiz.id}>{quiz.title}</option>
-                ))}
-              </select>
-            ) : (
-              <>
-                <select className="w-full p-2 border rounded" value={quizSize} onChange={(e) => setQuizSize(Number(e.target.value))}>
-                  <option value="">選擇題目數量</option>
-                  <option value="5">5 題</option>
-                  <option value="10">10 題</option>
-                  <option value="20">20 題</option>
-                </select>
-
-                <select multiple className="w-full p-2 border rounded h-24" value={selectedChapters} onChange={(e) => setSelectedChapters(Array.from(e.target.selectedOptions, (opt) => opt.value))}>
-                  {chapterOptions.map((ch) => (
-                    <option key={ch} value={ch}>{ch}</option>
-                  ))}
-                </select>
-              </>
-            )}
-
-            <button onClick={handleStartQuiz} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition" disabled={loadingStart}>
-              {loadingStart ? "載入中..." : "開始刷題"}
+      {step === "quiz" && mode === "batch" && (
+        <div className="space-y-6">
+          {filteredQuestions.map((q, idx) => (
+            <div key={q.id} className="bg-gray-50 p-4 rounded shadow">
+              <p className="font-semibold mb-2">{idx + 1}. {q.question}</p>
+              {q.options.map((opt, i) => (
+                <label key={i} className="block">
+                  <input
+                    type="radio"
+                    name={`q-${idx}`}
+                    value={opt}
+                    checked={userAnswers[idx] === opt}
+                    onChange={() => handleAnswer(idx, opt)}
+                    className="mr-2"
+                  />
+                  {opt}
+                </label>
+              ))}
+              {submitted && (
+                <div className="text-sm mt-2">
+                  {userAnswers[idx] === q.answer ? (
+                    <p className="text-green-600">✅ 正確</p>
+                  ) : (
+                    <p className="text-red-600">❌ 錯誤，正解：<span className="text-green-700 font-semibold">{q.answer}</span></p>
+                  )}
+                  {q.explanation && <p className="text-gray-600">解析：{q.explanation}</p>}
+                </div>
+              )}
+            </div>
+          ))}
+          {!submitted && (
+            <button className="px-6 py-2 bg-blue-600 text-white rounded" onClick={handleSubmitBatch}>
+              送出作答
             </button>
-            {errorStart && <p className="text-red-600">{errorStart}</p>}
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {step === "quiz" && (
-          <div className="w-full max-w-4xl space-y-6">
-            {questions.map((q, idx) => (
-              <div key={q.id} className="bg-white p-6 rounded-xl shadow space-y-2">
-                <p className="font-semibold">{idx + 1}. {q.question}</p>
-                {q.options.map((opt, i) => (
-                  <label key={i} className="block">
-                    <input
-                      type="radio"
-                      name={`q-${idx}`}
-                      value={opt}
-                      checked={userAnswers[idx] === opt}
-                      onChange={() => handleAnswer(idx, opt)}
-                      className="mr-2"
-                    />
-                    {opt}
-                  </label>
-                ))}
-              </div>
+      {step === "quiz" && mode === "single" && (
+        <div className="space-y-6">
+          <div className="bg-gray-50 p-4 rounded shadow">
+            <p className="font-semibold mb-2">{currentIdx + 1}. {filteredQuestions[currentIdx].question}</p>
+            {filteredQuestions[currentIdx].options.map((opt, i) => (
+              <label key={i} className="block">
+                <input
+                  type="radio"
+                  name={`q-${currentIdx}`}
+                  value={opt}
+                  checked={userAnswers[currentIdx] === opt}
+                  onChange={() => handleAnswer(currentIdx, opt)}
+                  className="mr-2"
+                />
+                {opt}
+              </label>
             ))}
-
-            {!submitted && (
-              <div className="flex justify-center mt-8">
-                <button
-                  onClick={handleSubmitQuiz}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                  disabled={totalAnswered !== questions.length}
-                >
-                  送出作答
-                </button>
-              </div>
-            )}
-
-            {submitted && (
-              <div className="text-center space-y-8 mt-12">
-                <h2 className="text-3xl font-bold text-green-600">刷題完成 🎉</h2>
-                <p className="text-2xl text-gray-800">
-                  得分：<span className="font-bold">{score} 分</span>
-                </p>
+            {userAnswers[currentIdx] && (
+              <div className="text-sm mt-2">
+                {userAnswers[currentIdx] === filteredQuestions[currentIdx].answer ? (
+                  <p className="text-green-600">✅ 正確</p>
+                ) : (
+                  <p className="text-red-600">❌ 錯誤，正解：<span className="text-green-700 font-semibold">{filteredQuestions[currentIdx].answer}</span></p>
+                )}
+                {filteredQuestions[currentIdx].explanation && <p className="text-gray-600">解析：{filteredQuestions[currentIdx].explanation}</p>}
               </div>
             )}
           </div>
-        )}
-      </main>
+          {userAnswers[currentIdx] && (
+            <button
+              className="px-6 py-2 bg-blue-600 text-white rounded"
+              onClick={handleNextSingle}
+            >下一題</button>
+          )}
+        </div>
+      )}
 
-      <footer className="text-center text-gray-400 text-sm p-4">&copy; 2025 PromptQuiz. All rights reserved.</footer>
+      {step === "result" && (
+        <div className="text-center mt-12">
+          <h2 className="text-3xl font-bold text-green-600 mb-4">🎉 完成作答</h2>
+          <p className="text-xl">你的得分：{score} / {filteredQuestions.length}</p>
+        </div>
+      )}
     </div>
   );
 }
